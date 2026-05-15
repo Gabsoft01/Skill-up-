@@ -26,6 +26,7 @@ interface AuthState {
   setUser: (user: User | null) => void;
   setProfile: (profile: UserProfile | null) => void;
   initializeAuth: () => void;
+  fetchProfile: (uid: string) => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -35,6 +36,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   isInitializing: true,
   setUser: (user) => set({ user }),
   setProfile: (profile) => set({ profile }),
+  fetchProfile: async (uid: string) => {
+    try {
+      const userDoc = await getDoc(doc(db, 'users', uid));
+      if (userDoc.exists()) {
+        set({ profile: userDoc.data() as UserProfile });
+      }
+    } catch (error) {
+      handleFirestoreError(error, OperationType.GET, `users/${uid}`);
+    }
+  },
   initializeAuth: () => {
     onAuthStateChanged(auth, async (user) => {
       if (user) {

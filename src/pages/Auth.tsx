@@ -26,9 +26,13 @@ export default function Auth() {
       } else {
         await createUserWithEmailAndPassword(auth, email, password);
       }
-      navigate('/'); 
+      navigate('/onboarding'); 
     } catch (err: any) {
-      setError(err.message || 'Authentication failed');
+      if (err.code === 'auth/operation-not-allowed') {
+        setError('Email/Password authentication is not enabled. Go to your Firebase Console > Authentication > Sign-in method, edit "Email/Password", enable it and save.');
+      } else {
+        setError(err.message || 'Authentication failed');
+      }
     } finally {
       setLoading(false);
     }
@@ -40,9 +44,13 @@ export default function Auth() {
     try {
       const provider = new GoogleAuthProvider();
       await signInWithPopup(auth, provider);
-      navigate('/');
+      navigate('/onboarding');
     } catch (err: any) {
-      setError(err.message || 'Google sign-in failed');
+      if (err.code === 'auth/operation-not-allowed') {
+        setError('Google authentication is not enabled. Go to your Firebase Console > Authentication > Sign-in method, edit "Google", enable it and save.');
+      } else {
+        setError(err.message || 'Google sign-in failed');
+      }
     } finally {
       setLoading(false);
     }

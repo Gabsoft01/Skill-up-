@@ -26,7 +26,7 @@ export default function Onboarding() {
     try {
       const newProfile = {
         uid: user.uid,
-        email: user.email!,
+        email: user.email || `${user.uid}@placeholder.com`,
         role: role,
         displayName: user.displayName || '',
         createdAt: serverTimestamp(),

@@ -123,5 +123,38 @@ service cloud.firestore {
           (isOwner(existing().clientId) && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']) && incoming().status in ['accepted', 'rejected'])
         );
     }
+
+    match /notifications/{notificationId} {
+      function isValidNotification(data) {
+        return data.keys().hasAll(['userId', 'title', 'message', 'type', 'isRead', 'createdAt'])
+          && data.userId is string && data.userId.size() > 0
+          && data.title is string && data.title.size() > 0 && data.title.size() <= 200
+          && data.message is string && data.message.size() > 0 && data.message.size() <= 1000
+          && data.type in ['proposal', 'offer', 'message', 'payment', 'system']
+          && data.isRead is bool
+          && (!('relatedId' in data) || (data.relatedId is string && data.relatedId.size() <= 128))
+          && (!('link' in data) || (data.link is string && data.link.size() <= 500))
+          && data.createdAt == request.time;
+      }
+
+      allow get: if isOwner(existing().userId) || isAdmin();
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+
+      allow create: if isSignedIn()
+        && isValidId(notificationId)
+        && isValidNotification(incoming());
+
+      allow update: if isSignedIn()
+        && isOwner(existing().userId)
+        && incoming().userId == existing().userId
+        && incoming().type == existing().type
+        && incoming().title == existing().title
+        && incoming().message == existing().message
+        && incoming().createdAt == existing().createdAt
+        && (
+          isAdmin() ||
+          incoming().diff(existing()).affectedKeys().hasOnly(['isRead'])
+        );
+    }
   }
 }

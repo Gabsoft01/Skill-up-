@@ -4,6 +4,7 @@ import { useAuthStore } from '../store/useAuthStore';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { doc, getDoc, collection, setDoc, serverTimestamp } from 'firebase/firestore';
 import { Briefcase, ArrowLeft, Loader2, IndianRupee, Clock, User, LogIn, DollarSign } from 'lucide-react';
+import { createNotification } from '../lib/notifications';
 
 export default function JobDetails() {
   const { id } = useParams();
@@ -51,6 +52,17 @@ export default function JobDetails() {
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       });
+
+      // Create notification for the client using helper
+      await createNotification({
+        userId: job.clientId,
+        title: 'New Proposal',
+        message: `${profile.displayName || 'A freelancer'} submitted a proposal for "${job.title}" with a bid of $${bidAmount}.`,
+        type: 'proposal',
+        relatedId: propRef.id,
+        link: '/client', // or route to proposals later
+      });
+
       navigate('/freelancer');
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'proposals');

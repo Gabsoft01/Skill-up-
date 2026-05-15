@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuthStore } from '../store/useAuthStore';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
-import { Search, Briefcase, Award, DollarSign } from 'lucide-react';
+import { Search, Briefcase, Award, DollarSign, UserCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export default function DashboardFreelancer() {
@@ -38,10 +38,16 @@ export default function DashboardFreelancer() {
           <h1 className="text-3xl font-display font-bold text-gray-900">Freelancer Dashboard</h1>
           <p className="text-gray-500 mt-1">Manage your active proposals and current contracts.</p>
         </div>
-        <Link to="/jobs" className="mt-4 md:mt-0 flex items-center px-6 py-3 bg-brand-600 text-white rounded-xl font-medium hover:bg-brand-700 transition-colors">
-          <Search className="w-5 h-5 mr-2" />
-          Browse New Jobs
-        </Link>
+        <div className="mt-4 md:mt-0 flex gap-4">
+          <Link to="/profile" className="flex items-center px-6 py-3 bg-white border border-gray-300 text-gray-700 rounded-xl font-medium hover:bg-gray-50 transition-colors">
+            <UserCircle className="w-5 h-5 mr-2" />
+            Edit Profile
+          </Link>
+          <Link to="/jobs" className="flex items-center px-6 py-3 bg-brand-600 text-white rounded-xl font-medium hover:bg-brand-700 transition-colors">
+            <Search className="w-5 h-5 mr-2" />
+            Browse New Jobs
+          </Link>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">

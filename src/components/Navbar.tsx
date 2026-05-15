@@ -3,6 +3,7 @@ import { useAuthStore } from '../store/useAuthStore';
 import { LogOut, User, Briefcase, PlusCircle, Search } from 'lucide-react';
 import { signOut } from 'firebase/auth';
 import { auth } from '../lib/firebase';
+import NotificationsDropdown from './NotificationsDropdown';
 
 export default function Navbar() {
   const { user, profile } = useAuthStore();
@@ -61,6 +62,8 @@ export default function Navbar() {
                   </div>
                   <span className="hidden sm:inline-block border-l pl-4 border-gray-200">Dashboard</span>
                 </Link>
+                <div className="border-l border-gray-200 h-6 mx-2 hidden sm:block"></div>
+                <NotificationsDropdown />
                 <button
                   onClick={handleLogout}
                   className="p-2 text-gray-400 hover:text-red-600 transition-colors"

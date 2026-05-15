@@ -77,6 +77,22 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["senderId", "content", "createdAt"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "System notification for a user",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "type": { "type": "string", "enum": ["proposal", "offer", "message", "payment", "system"] },
+        "isRead": { "type": "boolean" },
+        "relatedId": { "type": "string" },
+        "link": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "title", "message", "type", "isRead", "createdAt"]
     }
   },
   "firestore": {
@@ -99,6 +115,10 @@
     "/contracts/{contractId}/messages/{messageId}": {
       "schema": { "$ref": "#/entities/Message" },
       "description": "Chat messages within a contract"
+    },
+    "/notifications/{notificationId}": {
+      "schema": { "$ref": "#/entities/Notification" },
+      "description": "System notifications for users"
     }
   }
 }

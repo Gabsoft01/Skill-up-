@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from './store/useAuthStore';
 import { Loader2 } from 'lucide-react';
 
@@ -19,11 +19,13 @@ import JobDetails from './pages/JobDetails';
 import PostJob from './pages/PostJob';
 import DashboardClient from './pages/DashboardClient';
 import DashboardFreelancer from './pages/DashboardFreelancer';
+import EditProfile from './pages/EditProfile';
 
 function ProtectedRoute({ children, role }: { children: React.ReactNode; role?: 'client' | 'freelancer' }) {
-  const { user, profile, isInitializing } = useAuthStore();
+  const { user, profile, isInitializing, isLoading } = useAuthStore();
+  const location = useLocation();
 
-  if (isInitializing) {
+  if (isInitializing || isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-brand-600" />
@@ -35,11 +37,17 @@ function ProtectedRoute({ children, role }: { children: React.ReactNode; role?: 
     return <Navigate to="/auth" />;
   }
 
-  if (!profile) {
+  const isOnboarding = location.pathname === '/onboarding';
+
+  if (!profile && !isOnboarding) {
     return <Navigate to="/onboarding" />;
   }
 
-  if (role && profile.role !== role && profile.role !== 'admin') {
+  if (profile && isOnboarding) {
+    return <Navigate to={profile.role === 'client' ? '/client' : '/freelancer'} />;
+  }
+
+  if (role && profile && profile.role !== role && profile.role !== 'admin') {
     return <Navigate to="/" />;
   }
 
@@ -63,6 +71,7 @@ export default function App() {
           <Route path="/" element={<Home />} />
           <Route path="/jobs" element={<Jobs />} />
           <Route path="/jobs/:id" element={<JobDetails />} />
+          <Route path="/profile" element={<ProtectedRoute><EditProfile /></ProtectedRoute>} />
           
           {/* Client Routes */}
           <Route path="/client" element={<ProtectedRoute role="client"><DashboardClient /></ProtectedRoute>} />
