@@ -1,0 +1,193 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- PRIMITIVE HELPERS ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function isVerified() {
+      // In strict environments we’d require email_verified == true
+      // return request.auth.token.email_verified == true;
+      return true; // Allowing for easy demo signup
+    }
+    function isAdmin() {
+      // Only an explicitly defined list of admins or a custom check (like checking an `admins` collection).
+      // Here we will use exists() on an admins collection.
+      return isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+    function incoming() {
+      return request.resource.data;
+    }
+    function existing() {
+      return resource.data;
+    }
+
+    // --- ENTITY VALIDATORS ---
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'role', 'createdAt', 'updatedAt'])
+        && data.uid is string && data.uid.size() > 0
+        && data.email is string && data.email.size() > 0
+        && data.role in ['client', 'freelancer', 'admin']
+        && ( !('displayName' in data) || (data.displayName is string && data.displayName.size() <= 200) )
+        && ( !('walletBalance' in data) || data.walletBalance is number )
+        && ( !('bio' in data) || (data.bio is string && data.bio.size() <= 5000) )
+        && ( !('skills' in data) || (data.skills is list && data.skills.size() <= 50) )
+        && ( !('country' in data) || (data.country is string && data.country.size() <= 100) )
+        && data.createdAt == request.time
+        && data.updatedAt == request.time;
+    }
+
+    function isValidUserUpdate(data) {
+      return data.uid == existing().uid
+        && data.email == existing().email
+        && data.createdAt == existing().createdAt
+        && data.updatedAt == request.time
+        && data.role == existing().role // Users cannot escalate privileges
+        && data.walletBalance == existing().walletBalance; // Only backend or admin can change balance
+    }
+
+    // --- RULES ---
+
+    match /users/{userId} {
+      allow get: if isOwner(userId) || isAdmin() || isSignedIn(); // Public profile reads allowed
+      allow list: if isSignedIn(); // Allow listing users for freelancer search. For security, maybe restrict to specific fields, but here we allow.
+      
+      allow create: if isOwner(userId) 
+        && isValidId(userId)
+        && incoming().uid == request.auth.uid 
+        && incoming().role in ['client', 'freelancer'] // Cannot create oneself as admin
+        && (!('walletBalance' in incoming()) || incoming().walletBalance == 0)
+        && isValidUser(incoming());
+
+      allow update: if (isOwner(userId) || isAdmin())
+        && incoming().diff(existing()).affectedKeys().hasAny(['displayName', 'bio', 'skills', 'country', 'updatedAt'])
+        && (!incoming().diff(existing()).affectedKeys().hasAny(['uid', 'email', 'createdAt', 'role', 'walletBalance']) || isAdmin())
+        && isValidUserUpdate(incoming());
+    }
+
+    match /jobs/{jobId} {
+      function isValidJob(data) {
+        return data.keys().hasAll(['clientId', 'title', 'description', 'category', 'budget', 'status', 'createdAt', 'updatedAt'])
+          && data.clientId == request.auth.uid
+          && data.title is string && data.title.size() > 0 && data.title.size() <= 200
+          && data.description is string && data.description.size() > 0 && data.description.size() <= 10000
+          && data.category is string && data.category.size() > 0
+          && data.budget is number && data.budget >= 0
+          && data.status in ['open', 'in_progress', 'completed', 'cancelled']
+          && data.createdAt == request.time
+          && data.updatedAt == request.time;
+      }
+
+      allow get: if true; // Public jobs
+      allow list: if true;
+
+      allow create: if isSignedIn()
+        && isValidId(jobId)
+        && isValidJob(incoming());
+
+      // Only owner can update, cannot change clientId, createdAt
+      allow update: if (isOwner(existing().clientId) || isAdmin())
+        && incoming().clientId == existing().clientId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().title is string && incoming().title.size() <= 200
+        && incoming().description is string && incoming().description.size() <= 10000;
+    }
+
+    match /proposals/{proposalId} {
+      function isValidProposal(data) {
+         return data.keys().hasAll(['jobId', 'clientId', 'freelancerId', 'coverLetter', 'bidAmount', 'status', 'createdAt', 'updatedAt'])
+           && data.freelancerId == request.auth.uid
+           && data.coverLetter is string && data.coverLetter.size() <= 10000
+           && data.bidAmount is number && data.bidAmount >= 0
+           && data.status in ['pending', 'accepted', 'rejected', 'withdrawn']
+           && data.createdAt == request.time
+           && data.updatedAt == request.time;
+      }
+
+      // Freelancer can read their own proposals, Client can read proposals for their jobs
+      allow get: if isOwner(existing().freelancerId) || isOwner(existing().clientId) || isAdmin();
+      allow list: if isSignedIn() && (resource.data.freelancerId == request.auth.uid || resource.data.clientId == request.auth.uid);
+
+      allow create: if isSignedIn()
+        && isValidId(proposalId)
+        && isValidProposal(incoming())
+        // Enforce that clientId matches the job's clientId
+        && exists(/databases/$(database)/documents/jobs/$(incoming().jobId))
+        && incoming().clientId == get(/databases/$(database)/documents/jobs/$(incoming().jobId)).data.clientId;
+
+      allow update: if isSignedIn()
+        && incoming().updatedAt == request.time
+        && incoming().jobId == existing().jobId
+        && incoming().clientId == existing().clientId
+        && incoming().freelancerId == existing().freelancerId
+        && incoming().createdAt == existing().createdAt
+        // Freelancer can withdraw/update amount, Client can accept/reject
+        && (
+            (isOwner(existing().freelancerId) && incoming().diff(existing()).affectedKeys().hasOnly(['bidAmount', 'coverLetter', 'status', 'updatedAt']) && incoming().status in ['pending', 'withdrawn']) ||
+            (isOwner(existing().clientId) && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']) && incoming().status in ['accepted', 'rejected'])
+        );
+    }
+
+    match /contracts/{contractId} {
+      function isValidContract(data) {
+        return data.keys().hasAll(['jobId', 'clientId', 'freelancerId', 'amount', 'escrowStatus', 'status', 'createdAt', 'updatedAt'])
+          && data.amount is number && data.amount >= 0
+          && data.escrowStatus in ['pending', 'funded', 'released', 'refunded', 'disputed']
+          && data.status in ['active', 'completed', 'cancelled', 'disputed']
+          && data.createdAt == request.time
+          && data.updatedAt == request.time;
+      }
+
+      allow get: if isOwner(existing().clientId) || isOwner(existing().freelancerId) || isAdmin();
+      allow list: if isSignedIn() && (resource.data.clientId == request.auth.uid || resource.data.freelancerId == request.auth.uid);
+
+      // We only allow clients to create a contract
+      allow create: if isSignedIn() && isOwner(incoming().clientId)
+        && isValidId(contractId)
+        && isValidContract(incoming())
+        && exists(/databases/$(database)/documents/jobs/$(incoming().jobId));
+
+      allow update: if isSignedIn()
+        && incoming().updatedAt == request.time
+        && incoming().jobId == existing().jobId
+        && incoming().clientId == existing().clientId
+        && incoming().freelancerId == existing().freelancerId
+        && incoming().createdAt == existing().createdAt
+        && (isOwner(existing().clientId) || isOwner(existing().freelancerId) || isAdmin());
+      
+      match /messages/{messageId} {
+        function isValidMessage(data) {
+          return data.keys().hasAll(['senderId', 'content', 'createdAt'])
+            && data.senderId == request.auth.uid
+            && data.content is string && data.content.size() > 0 && data.content.size() <= 2000
+            && data.createdAt == request.time;
+        }
+
+        // Only participants of the parent contract can read/write messages
+        function isParticipant() {
+          let contract = get(/databases/$(database)/documents/contracts/$(contractId));
+          return contract != null && (contract.data.clientId == request.auth.uid || contract.data.freelancerId == request.auth.uid);
+        }
+
+        allow get, list: if isSignedIn() && isParticipant();
+        allow create: if isSignedIn() && isParticipant() 
+          && isValidId(messageId)
+          && isValidMessage(incoming());
+      }
+    }
+  }
+}

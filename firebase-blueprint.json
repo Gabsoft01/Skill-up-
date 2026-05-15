@@ -1,0 +1,104 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "A user of the platform (Client, Freelancer, or Admin)",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "role": { "type": "string", "enum": ["client", "freelancer", "admin"] },
+        "walletBalance": { "type": "number" },
+        "bio": { "type": "string" },
+        "skills": { "type": "array", "items": { "type": "string" } },
+        "country": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "role", "createdAt", "updatedAt"]
+    },
+    "Job": {
+      "title": "Job",
+      "description": "A digital service job posted by a client",
+      "type": "object",
+      "properties": {
+        "clientId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "category": { "type": "string" },
+        "budget": { "type": "number" },
+        "currency": { "type": "string" },
+        "status": { "type": "string", "enum": ["open", "in_progress", "completed", "cancelled"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["clientId", "title", "description", "category", "budget", "status", "createdAt", "updatedAt"]
+    },
+    "Proposal": {
+      "title": "Proposal",
+      "description": "A bid placed by a freelancer on a job",
+      "type": "object",
+      "properties": {
+        "jobId": { "type": "string" },
+        "clientId": { "type": "string" },
+        "freelancerId": { "type": "string" },
+        "coverLetter": { "type": "string" },
+        "bidAmount": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "accepted", "rejected", "withdrawn"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["jobId", "clientId", "freelancerId", "coverLetter", "bidAmount", "status", "createdAt", "updatedAt"]
+    },
+    "Contract": {
+      "title": "Contract",
+      "description": "An active funded project between a client and a freelancer",
+      "type": "object",
+      "properties": {
+        "jobId": { "type": "string" },
+        "clientId": { "type": "string" },
+        "freelancerId": { "type": "string" },
+        "amount": { "type": "number" },
+        "escrowStatus": { "type": "string", "enum": ["pending", "funded", "released", "refunded", "disputed"] },
+        "status": { "type": "string", "enum": ["active", "completed", "cancelled", "disputed"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["jobId", "clientId", "freelancerId", "amount", "escrowStatus", "status", "createdAt", "updatedAt"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "A real-time chat message within a contract",
+      "type": "object",
+      "properties": {
+        "senderId": { "type": "string" },
+        "content": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["senderId", "content", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Platform users"
+    },
+    "/jobs/{jobId}": {
+      "schema": { "$ref": "#/entities/Job" },
+      "description": "Available jobs"
+    },
+    "/proposals/{proposalId}": {
+      "schema": { "$ref": "#/entities/Proposal" },
+      "description": "Freelancer bids on jobs"
+    },
+    "/contracts/{contractId}": {
+      "schema": { "$ref": "#/entities/Contract" },
+      "description": "Active contracts"
+    },
+    "/contracts/{contractId}/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/Message" },
+      "description": "Chat messages within a contract"
+    }
+  }
+}

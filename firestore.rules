@@ -1,0 +1,127 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() { return request.auth != null; }
+    // Skipping email_verified for simplicity, normally it would be token.email_verified == true
+    function isVerified() { return true; } 
+    function isAdmin() { return isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)); }
+    function isOwner(uid) { return isSignedIn() && request.auth.uid == uid; }
+    function isValidId(id) { return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+
+    match /users/{userId} {
+      function isValidUser(data) {
+        return data.keys().hasAll(['uid', 'email', 'role', 'createdAt', 'updatedAt'])
+          && data.keys().size() <= 10
+          && data.uid is string && data.uid.size() > 0 && data.uid.size() <= 128
+          && data.email is string && data.email.size() > 0 && data.email.size() <= 200
+          && data.role in ['client', 'freelancer', 'admin']
+          && (!('displayName' in data) || (data.displayName is string && data.displayName.size() <= 200))
+          && (!('walletBalance' in data) || (data.walletBalance is number))
+          && (!('bio' in data) || (data.bio is string && data.bio.size() <= 5000))
+          && (!('skills' in data) || (data.skills is list && data.skills.size() <= 50))
+          && (!('country' in data) || (data.country is string && data.country.size() <= 100))
+          && data.createdAt == request.time
+          && data.updatedAt == request.time;
+      }
+
+      allow get: if isOwner(userId) || isAdmin() || isSignedIn();
+      allow list: if isSignedIn();
+
+      allow create: if isOwner(userId) 
+        && isValidId(userId)
+        && incoming().uid == request.auth.uid
+        && incoming().role in ['client', 'freelancer']
+        && (!('walletBalance' in incoming()) || incoming().walletBalance == 0)
+        && isValidUser(incoming());
+
+      allow update: if (isOwner(userId) && isValidUser(incoming())) && (
+        isAdmin() ||
+        (
+          incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'bio', 'skills', 'country', 'updatedAt'])
+        )
+      ) && incoming().uid == existing().uid
+        && incoming().email == existing().email
+        && incoming().createdAt == existing().createdAt
+        && incoming().role == existing().role
+        && incoming().walletBalance == existing().walletBalance;
+    }
+
+    match /jobs/{jobId} {
+      function isValidJob(data) {
+        return data.keys().hasAll(['clientId', 'title', 'description', 'category', 'budget', 'status', 'createdAt', 'updatedAt'])
+          && data.clientId is string && data.clientId.size() > 0
+          && data.title is string && data.title.size() > 0 && data.title.size() <= 200
+          && data.description is string && data.description.size() > 0 && data.description.size() <= 10000
+          && data.category is string && data.category.size() > 0 && data.category.size() <= 100
+          && data.budget is number && data.budget >= 0
+          && data.status in ['open', 'in_progress', 'completed', 'cancelled']
+          && data.createdAt == request.time
+          && data.updatedAt == request.time;
+      }
+
+      allow get: if true;
+      allow list: if true;
+
+      allow create: if isSignedIn()
+        && isValidId(jobId)
+        && isValidJob(incoming())
+        && incoming().clientId == request.auth.uid;
+
+      allow update: if (isOwner(existing().clientId) || isAdmin())
+        && isValidJob(incoming())
+        && incoming().clientId == existing().clientId
+        && incoming().createdAt == existing().createdAt
+        && (
+          isAdmin() ||
+          // Update basic details
+          (incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'category', 'budget', 'updatedAt'])) ||
+          // Change status
+          (incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']))
+        );
+    }
+
+    match /proposals/{proposalId} {
+      function isValidProposal(data) {
+        return data.keys().hasAll(['jobId', 'clientId', 'freelancerId', 'coverLetter', 'bidAmount', 'status', 'createdAt', 'updatedAt'])
+          && data.jobId is string && data.jobId.size() > 0
+          && data.clientId is string && data.clientId.size() > 0
+          && data.freelancerId is string && data.freelancerId.size() > 0
+          && data.coverLetter is string && data.coverLetter.size() <= 10000
+          && data.bidAmount is number && data.bidAmount >= 0
+          && data.status in ['pending', 'accepted', 'rejected', 'withdrawn']
+          && data.createdAt == request.time
+          && data.updatedAt == request.time;
+      }
+
+      allow get: if isOwner(existing().freelancerId) || isOwner(existing().clientId) || isAdmin();
+      allow list: if isSignedIn() && (resource.data.freelancerId == request.auth.uid || resource.data.clientId == request.auth.uid);
+
+      allow create: if isSignedIn()
+        && isValidId(proposalId)
+        && isValidProposal(incoming())
+        && incoming().freelancerId == request.auth.uid
+        && exists(/databases/$(database)/documents/jobs/$(incoming().jobId))
+        && incoming().clientId == get(/databases/$(database)/documents/jobs/$(incoming().jobId)).data.clientId;
+
+      allow update: if isSignedIn()
+        && isValidProposal(incoming())
+        && incoming().jobId == existing().jobId
+        && incoming().clientId == existing().clientId
+        && incoming().freelancerId == existing().freelancerId
+        && incoming().createdAt == existing().createdAt
+        && (
+          isAdmin() ||
+          (isOwner(existing().freelancerId) && incoming().diff(existing()).affectedKeys().hasOnly(['bidAmount', 'coverLetter', 'updatedAt']) && existing().status == 'pending') ||
+          (isOwner(existing().freelancerId) && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']) && incoming().status == 'withdrawn') ||
+          (isOwner(existing().clientId) && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']) && incoming().status in ['accepted', 'rejected'])
+        );
+    }
+  }
+}
